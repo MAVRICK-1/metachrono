@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/metachrono/static/css/main.4d6d49cc.css",
-    "main.js": "/metachrono/static/js/main.c6d87650.js",
+    "main.js": "/metachrono/static/js/main.78822671.js",
     "index.html": "/metachrono/index.html",
     "main.4d6d49cc.css.map": "/metachrono/static/css/main.4d6d49cc.css.map",
-    "main.c6d87650.js.map": "/metachrono/static/js/main.c6d87650.js.map"
+    "main.78822671.js.map": "/metachrono/static/js/main.78822671.js.map"
   },
   "entrypoints": [
     "static/css/main.4d6d49cc.css",
-    "static/js/main.c6d87650.js"
+    "static/js/main.78822671.js"
   ]
 }
