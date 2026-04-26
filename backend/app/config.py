@@ -4,10 +4,10 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # OpenMetadata connection
-    OPENMETADATA_URL: str = "http://openmetadata-server:8585/api/v1"
+    OPENMETADATA_URL: str = "https://sandbox.open-metadata.org/api/v1"
     OPENMETADATA_JWT_TOKEN: Optional[str] = None
-    OPENMETADATA_USERNAME: str = "admin"
-    OPENMETADATA_PASSWORD: str = "admin"
+    OPENMETADATA_USERNAME: str = "admin@open-metadata.org"
+    OPENMETADATA_PASSWORD: str = "Admin@1234"
 
     # Gemini (free tier) — primary AI provider
     # Get key at: https://aistudio.google.com/app/apikey

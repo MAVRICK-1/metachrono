@@ -37,6 +37,29 @@ def _is_governance_event(event) -> bool:
     return any(f in GOVERNANCE_FIELDS for f in all_fields)
 
 
+def _to_gov_event(entry: dict, entity_type: str, entity_id: str) -> dict:
+    cd_raw = entry.get("changeDescription") or {}
+    details: dict = {}
+    for f in cd_raw.get("fieldsUpdated", []):
+        if f.get("name") in GOVERNANCE_FIELDS:
+            details[f["name"]] = {"from": f.get("oldValue"), "to": f.get("newValue")}
+    for f in cd_raw.get("fieldsAdded", []):
+        if f.get("name") in GOVERNANCE_FIELDS:
+            details[f["name"]] = {"added": f.get("newValue")}
+    for f in cd_raw.get("fieldsDeleted", []):
+        if f.get("name") in GOVERNANCE_FIELDS:
+            details[f["name"]] = {"removed": f.get("oldValue")}
+    return GovernanceEvent(
+        timestamp=int(entry.get("timestamp", 0)),
+        entityId=entry.get("entityId", entity_id),
+        entityName=entry.get("entityFQN") or entity_id,
+        entityType=entry.get("entityType", entity_type),
+        eventType=entry.get("eventType", "ENTITY_UPDATED"),
+        actor=entry.get("userName") or entry.get("updatedBy") or "system",
+        details=details,
+    ).model_dump()
+
+
 @router.get("/{entity_type}/{entity_id}/audit")
 async def governance_audit(
     entity_type: str,
@@ -76,6 +99,10 @@ async def governance_audit(
         pass
 
     # Fallback: reconstruct from version history
+    try:
+        events = await get_entity_timeline(entity_type, entity_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     gov_events = [e for e in events if _is_governance_event(e)]
 
