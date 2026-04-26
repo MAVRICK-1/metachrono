@@ -10,9 +10,7 @@ import LineagePage from './pages/LineagePage';
 import HowToUsePage from './pages/HowToUsePage';
 import GuidedTour, { useTour } from './components/GuidedTour';
 import UserMenu from './components/UserMenu';
-import FirebaseSetup from './components/FirebaseSetup';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { firebaseConfigured } from './firebase';
+import { AuthProvider } from './contexts/AuthContext';
 import {
   LayoutDashboard, Clock, GitBranch, Zap,
   ShieldCheck, Bot, Database, HelpCircle, Play
@@ -101,14 +99,6 @@ function Layout({ children, onStartTour }: { children: React.ReactNode; onStartT
 
 function AppInner() {
   const { show, startTour, endTour } = useTour();
-  const { profile } = useAuth();
-  const [fbSetup, setFbSetup] = useState(
-    !firebaseConfigured && !localStorage.getItem('mc_fb_skipped')
-  );
-
-  if (fbSetup) {
-    return <FirebaseSetup onSkip={() => { localStorage.setItem('mc_fb_skipped', '1'); setFbSetup(false); }} />;
-  }
 
   return (
     <>
