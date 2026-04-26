@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: metachrono-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENMETADATA_URL
+        value: https://sandbox.open-metadata.org/api/v1
+      - key: OPENMETADATA_USERNAME
+        value: admin
+      - key: OPENMETADATA_PASSWORD
+        value: admin
+      - key: CORS_ORIGINS
+        value: https://YOUR_GITHUB_USERNAME.github.io
+    healthCheckPath: /health
+    autoDeploy: true

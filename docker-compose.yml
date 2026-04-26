@@ -1,0 +1,38 @@
+version: '3.9'
+
+services:
+  # ── MetaChronos Backend ───────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: metachrono-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENMETADATA_URL=${OPENMETADATA_URL:-http://openmetadata-server:8585/api/v1}
+      - OPENMETADATA_JWT_TOKEN=${OPENMETADATA_JWT_TOKEN:-}
+      - OPENMETADATA_USERNAME=${OPENMETADATA_USERNAME:-admin}
+      - OPENMETADATA_PASSWORD=${OPENMETADATA_PASSWORD:-admin}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── MetaChronos Frontend ──────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: metachrono-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api/v1
+
+networks:
+  default:
+    name: metachrono-net

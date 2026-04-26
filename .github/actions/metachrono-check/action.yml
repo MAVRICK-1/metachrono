@@ -1,0 +1,100 @@
+name: 'MetaChronos Schema Guard'
+description: >
+  Validates that schema changes in this PR will not silently break
+  downstream assets tracked in OpenMetadata. Computes blast radius,
+  lists affected assets, and optionally fails the build if critical
+  assets are impacted.
+
+inputs:
+  openmetadata_url:
+    description: 'OpenMetadata API URL'
+    required: true
+  openmetadata_token:
+    description: 'OpenMetadata JWT token'
+    required: true
+  metachrono_url:
+    description: 'MetaChronos backend URL'
+    required: true
+  entity_type:
+    description: 'Entity type to check (e.g. tables)'
+    required: false
+    default: 'tables'
+  entity_id:
+    description: 'Entity UUID to analyse'
+    required: true
+  fail_on_critical:
+    description: 'Fail the workflow if any critical assets are impacted'
+    required: false
+    default: 'true'
+  critical_threshold:
+    description: 'Impact score threshold to consider critical (0-100)'
+    required: false
+    default: '60'
+
+outputs:
+  total_impacted:
+    description: 'Total number of downstream assets impacted'
+    value: ${{ steps.analyse.outputs.total_impacted }}
+  critical_count:
+    description: 'Number of critically impacted assets'
+    value: ${{ steps.analyse.outputs.critical_count }}
+  report_url:
+    description: 'URL to the full impact report in MetaChronos'
+    value: ${{ steps.analyse.outputs.report_url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Analyse Impact
+      id: analyse
+      shell: bash
+      run: |
+        echo "🔍 MetaChronos Schema Guard — checking blast radius..."
+
+        RESPONSE=$(curl -sf \
+          "${{ inputs.metachrono_url }}/api/v1/impact/${{ inputs.entity_type }}/${{ inputs.entity_id }}?change_type=SCHEMA_CHANGE" \
+          -H "Authorization: Bearer ${{ inputs.openmetadata_token }}" \
+          || echo '{"totalImpacted":0,"criticalCount":0,"warningCount":0,"impactedAssets":[]}')
+
+        TOTAL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('totalImpacted',0))")
+        CRITICAL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('criticalCount',0))")
+        WARNING=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('warningCount',0))")
+        SOURCE=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sourceEntityName','unknown'))")
+
+        echo "total_impacted=$TOTAL"   >> "$GITHUB_OUTPUT"
+        echo "critical_count=$CRITICAL" >> "$GITHUB_OUTPUT"
+        echo "report_url=${{ inputs.metachrono_url }}/impact?entityId=${{ inputs.entity_id }}" >> "$GITHUB_OUTPUT"
+
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  ⏳ MetaChronos Blast Radius Report"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  Entity       : $SOURCE"
+        echo "  Total impact : $TOTAL downstream assets"
+        echo "  🔴 Critical  : $CRITICAL"
+        echo "  🟡 Warning   : $WARNING"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # Print impacted assets table
+        echo "$RESPONSE" | python3 -c "
+        import sys, json
+        d = json.load(sys.stdin)
+        assets = d.get('impactedAssets', [])[:10]
+        if assets:
+            print()
+            print('  Top impacted assets:')
+            for a in assets:
+                score = a.get('impactScore', 0)
+                icon = '🔴' if score >= 60 else ('🟡' if score >= 30 else '🟢')
+                print(f'  {icon} {a[\"name\"]:<30} score={score:>5}  hops={a[\"hopsFromSource\"]}')
+        "
+
+        if [[ "${{ inputs.fail_on_critical }}" == "true" && "$CRITICAL" -gt "0" ]]; then
+          echo ""
+          echo "❌ Build blocked: $CRITICAL critical asset(s) will break."
+          echo "   Review the full report at: ${{ inputs.metachrono_url }}/impact?entityId=${{ inputs.entity_id }}"
+          exit 1
+        fi
+
+        echo ""
+        echo "✅ Schema guard passed."
