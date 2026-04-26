@@ -3,7 +3,7 @@
 > **Time-travel through your data's metadata history.**
 > Understand what changed, when, why, and what broke — all powered by OpenMetadata.
 
-[![Deploy Frontend](https://github.com/YOUR_USERNAME/metachrono/actions/workflows/ci-deploy.yml/badge.svg)](https://github.com/YOUR_USERNAME/metachrono/actions)
+[![Deploy Frontend](https://github.com/MAVRICK-1/metachrono/actions/workflows/ci-deploy.yml/badge.svg)](https://github.com/MAVRICK-1/metachrono/actions)
 [![OpenMetadata](https://img.shields.io/badge/Built%20on-OpenMetadata-7c5cfc?logo=data:image/svg+xml;base64,)](https://open-metadata.org)
 
 ---
@@ -47,38 +47,100 @@ Full [Model Context Protocol](https://spec.modelcontextprotocol.io/) server. Add
 
 ## 🏗️ Architecture
 
+```mermaid
+graph TB
+    subgraph UI["🖥️ MetaChronos Frontend (React + TypeScript)"]
+        D[Dashboard]
+        TL[Timeline ⏳]
+        LG[Lineage 🕸️]
+        IP[Impact 💥]
+        GV[Governance 🛡️]
+        AI[AI Chat 🤖]
+    end
+
+    subgraph API["⚙️ MetaChronos Backend (FastAPI)"]
+        T["/timeline — Time Travel"]
+        I["/impact — Blast Radius"]
+        L["/lineage — Graph"]
+        G["/governance — Audit"]
+        A["/ai — Root Cause"]
+        M["/mcp — MCP Server 🔌"]
+    end
+
+    subgraph OM["📦 OpenMetadata"]
+        V[Entity Version History]
+        LN[Lineage Graph API]
+        S[Search API]
+        GG[Tags & Governance]
+        DQ[Data Quality Tests]
+    end
+
+    subgraph EXT["🌐 External Integrations"]
+        CL[Claude Desktop / Cursor]
+        GH[GitHub Actions CI/CD]
+        OAI[OpenAI GPT-4o]
+    end
+
+    UI -->|REST| API
+    API -->|REST| OM
+    CL -->|MCP JSON-RPC| M
+    GH -->|HTTP| I
+    A -->|optional| OAI
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MetaChronos                          │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────────────────────┐  │
-│  │   React UI   │◄──►│     FastAPI Backend           │  │
-│  │              │    │                              │  │
-│  │ • Dashboard  │    │ /api/v1/timeline  (⏳)       │  │
-│  │ • Timeline   │    │ /api/v1/impact    (💥)       │  │
-│  │ • Lineage    │    │ /api/v1/lineage   (🕸️)       │  │
-│  │ • Impact     │    │ /api/v1/governance(🛡️)       │  │
-│  │ • Governance │    │ /api/v1/ai        (🤖)       │  │
-│  │ • AI Chat    │    │ /api/v1/mcp       (🔌)       │  │
-│  └──────────────┘    └──────────┬───────────────────┘  │
-│                                 │                       │
-└─────────────────────────────────┼───────────────────────┘
-                                  │ REST API
-                    ┌─────────────▼──────────────┐
-                    │       OpenMetadata          │
-                    │  • Entity Version History   │
-                    │  • Lineage Graph API        │
-                    │  • Search API               │
-                    │  • Governance / Tags        │
-                    │  • Data Quality Tests       │
-                    └────────────────────────────┘
+
+---
+
+## 🔄 Time Travel Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant MC as MetaChronos
+    participant OM as OpenMetadata
+
+    User->>MC: "Show me orders_fact at Jan 1st"
+    MC->>OM: GET /tables/{id}/versions
+    OM-->>MC: [v0.1, v0.2, v0.3, v0.4]
+    MC->>OM: GET /tables/{id}/versions/0.3
+    OM-->>MC: Snapshot at v0.3 (Jan 1st)
+    MC-->>User: 📸 Schema as it was on Jan 1st
+
+    User->>MC: "What changed between v0.2 and v0.4?"
+    MC->>OM: GET /tables/{id}/versions/0.2
+    MC->>OM: GET /tables/{id}/versions/0.4
+    OM-->>MC: Both snapshots
+    MC-->>User: 📊 Diff: +revenue_usd, ~customer_id (INT→VARCHAR), -legacy_col
 ```
+
+---
+
+## 💥 Blast Radius Flow
+
+```mermaid
+flowchart LR
+    src["orders_fact\n(source)"]
+
+    src -->|hop 1| d1["revenue_dashboard\n🔴 score=94"]
+    src -->|hop 1| d2["monthly_reports\n🔴 score=78"]
+    src -->|hop 2| d3["customer_analytics\n🟡 score=45"]
+    src -->|hop 2| d4["exec_kpis\n🟡 score=38"]
+    src -->|hop 3| d5["data_lake_export\n🟢 score=18"]
+
+    style src fill:#7c5cfc,color:#fff,stroke:#7c5cfc
+    style d1 fill:#f87171,color:#fff,stroke:#f87171
+    style d2 fill:#f87171,color:#fff,stroke:#f87171
+    style d3 fill:#fbbf24,color:#000,stroke:#fbbf24
+    style d4 fill:#fbbf24,color:#000,stroke:#fbbf24
+    style d5 fill:#34d399,color:#000,stroke:#34d399
+```
+
+---
 
 **Tech Stack:**
 - **Backend:** Python 3.11, FastAPI, httpx, Pydantic v2, NetworkX
 - **Frontend:** React 18, TypeScript, ReactFlow, Recharts, Lucide
-- **Deployment:** GitHub Pages (frontend) + Render (backend)
-- **OpenMetadata:** Full REST API integration — version history, lineage, governance, search
+- **Deployment:** GitHub Pages (frontend) + Render.com (backend)
+- **OpenMetadata:** Full REST API — version history, lineage, governance, search
 
 ---
 
@@ -87,7 +149,7 @@ Full [Model Context Protocol](https://spec.modelcontextprotocol.io/) server. Add
 ### Option 1: Docker Compose (Recommended)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/metachrono.git
+git clone https://github.com/MAVRICK-1/metachrono.git
 cd metachrono
 cp .env.example .env
 # Edit .env — point to your OpenMetadata instance
@@ -133,7 +195,7 @@ curl -sL https://github.com/open-metadata/OpenMetadata/releases/latest/download/
 ```bash
 cd frontend
 npm install --legacy-peer-deps
-# Edit package.json homepage → "https://YOUR_USERNAME.github.io/metachrono"
+# Edit package.json homepage → "https://MAVRICK-1.github.io/metachrono"
 npm run deploy
 ```
 
@@ -188,7 +250,7 @@ Block PRs that would break downstream assets:
 
 ```yaml
 - name: MetaChronos Schema Guard
-  uses: YOUR_USERNAME/metachrono/.github/actions/metachrono-check@main
+  uses: MAVRICK-1/metachrono/.github/actions/metachrono-check@main
   with:
     openmetadata_url: ${{ secrets.OPENMETADATA_URL }}
     openmetadata_token: ${{ secrets.OPENMETADATA_TOKEN }}
