@@ -13,6 +13,6 @@ services:
       - key: OPENMETADATA_PASSWORD
         value: admin
       - key: CORS_ORIGINS
-        value: https://YOUR_GITHUB_USERNAME.github.io
+        value: https://mavrick-1.github.io
     healthCheckPath: /health
     autoDeploy: true
