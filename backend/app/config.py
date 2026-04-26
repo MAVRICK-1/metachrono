@@ -9,7 +9,12 @@ class Settings(BaseSettings):
     OPENMETADATA_USERNAME: str = "admin"
     OPENMETADATA_PASSWORD: str = "admin"
 
-    # OpenAI for root-cause AI assistant
+    # Gemini (free tier) — primary AI provider
+    # Get key at: https://aistudio.google.com/app/apikey
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+
+    # OpenAI — fallback AI provider (optional, paid)
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
 

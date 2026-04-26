@@ -49,9 +49,33 @@ async def governance_audit(
     tagging history, ownership changes, PII classification events, etc.
     """
     try:
-        events = await get_entity_timeline(entity_type, entity_id)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        # Use real audit logs API: GET /v1/audit/logs
+        logs = await om_client.get_audit_logs(
+            entity_type=entity_type,
+            entity_fqn=None,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            limit=100,
+        )
+        all_events = []
+        for entry in logs.get("data", []):
+            if entry.get("entityId") != entity_id:
+                continue
+            cd_raw = entry.get("changeDescription") or {}
+            all_fields = (
+                [f.get("name", "") for f in cd_raw.get("fieldsAdded", [])]
+                + [f.get("name", "") for f in cd_raw.get("fieldsUpdated", [])]
+                + [f.get("name", "") for f in cd_raw.get("fieldsDeleted", [])]
+            )
+            if not any(f in GOVERNANCE_FIELDS for f in all_fields) and entry.get("eventType") not in ("ENTITY_CREATED", "ENTITY_DELETED"):
+                continue
+            all_events.append(entry)
+        if all_events:
+            return [_to_gov_event(e, entity_type, entity_id) for e in all_events]
+    except Exception:
+        pass
+
+    # Fallback: reconstruct from version history
 
     gov_events = [e for e in events if _is_governance_event(e)]
 

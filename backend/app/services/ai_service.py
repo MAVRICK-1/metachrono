@@ -1,26 +1,38 @@
 """
 AI Assistant Service
 ====================
-Provides root-cause analysis and metadata intelligence using an LLM
-(OpenAI GPT-4o by default, gracefully degrades when no key is set).
+Dual-provider AI: tries Gemini first (free tier), falls back to OpenAI,
+then to built-in rule-based responses — so it always works.
 
-The assistant is grounded in real OpenMetadata context:
-  - Entity timeline events
-  - Schema diffs
-  - Lineage information
-  - Data quality results
+  Priority: Gemini (free) → OpenAI (paid) → rule-based (no key needed)
+
+Get a free Gemini key at: https://aistudio.google.com/app/apikey
 """
 
-import json
 from typing import Optional
+from datetime import datetime
 
 from app.config import settings
 from app.models.schemas import AIQueryResponse, ChangeEvent
 
+_gemini_model = None
 _openai_client = None
 
 
-def _get_client():
+def _get_gemini():
+    global _gemini_model
+    if _gemini_model is None and settings.GEMINI_API_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        _gemini_model = genai.GenerativeModel(
+            model_name=settings.GEMINI_MODEL,
+            generation_config={"temperature": 0.2, "max_output_tokens": 1024},
+            system_instruction=SYSTEM_PROMPT,
+        )
+    return _gemini_model
+
+
+def _get_openai():
     global _openai_client
     if _openai_client is None and settings.OPENAI_API_KEY:
         from openai import AsyncOpenAI
@@ -28,24 +40,16 @@ def _get_client():
     return _openai_client
 
 
-SYSTEM_PROMPT = """You are MetaChronos AI — a data intelligence assistant embedded in a temporal \
-metadata analytics platform built on top of OpenMetadata.
-
-Your job is to help data engineers, data analysts, and data stewards understand:
-1. Why data quality issues occurred and when they started
-2. What downstream assets are at risk when a schema changes
-3. Who made a change and what was the intent
-4. How to remediate a broken data pipeline or governance gap
-
-You are given structured context from OpenMetadata (entity versions, lineage graphs, change events, \
-data quality test results, governance tags) and you must produce a clear, actionable answer.
-
-Always:
-- Cite specific events, timestamps, and actor names when available
-- Suggest concrete next steps
-- Be concise but thorough
-- Use Markdown formatting for readability
-"""
+SYSTEM_PROMPT = (
+    "You are MetaChronos AI — a data intelligence assistant built on top of OpenMetadata. "
+    "Help data engineers, analysts, and stewards understand:\n"
+    "1. Why data quality issues occurred and when they started\n"
+    "2. What downstream assets are at risk when a schema changes\n"
+    "3. Who made a change and what was the intent\n"
+    "4. How to remediate broken pipelines or governance gaps\n\n"
+    "Always cite specific events, timestamps, and actor names. "
+    "Suggest concrete next steps. Be concise but thorough. Use Markdown."
+)
 
 
 async def answer_query(
@@ -54,51 +58,54 @@ async def answer_query(
     entity_name: Optional[str] = None,
     extra_context: Optional[str] = None,
 ) -> AIQueryResponse:
-    """
-    Use the LLM to answer a free-form question about the metadata context.
-    Falls back to a rule-based response when OpenAI is not configured.
-    """
-    client = _get_client()
-
-    if not client:
-        return _rule_based_response(question, context_events, entity_name)
-
+    """Try Gemini → OpenAI → rule-based, in that order."""
     context_text = _build_context_text(context_events, entity_name, extra_context)
+    prompt = (
+        f"## Question\n{question}\n\n"
+        f"## OpenMetadata Context\n{context_text}\n\n"
+        "Provide root-cause analysis and actionable recommendations."
+    )
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"## Question\n{question}\n\n"
-                f"## OpenMetadata Context\n{context_text}\n\n"
-                "Please provide a root-cause analysis and actionable recommendations."
-            ),
-        },
-    ]
+    # 1. Try Gemini (free tier)
+    gemini = _get_gemini()
+    if gemini:
+        try:
+            resp = await gemini.generate_content_async(prompt)
+            answer = resp.text or ""
+            return AIQueryResponse(
+                answer=answer,
+                reasoning="Powered by Google Gemini (free tier)",
+                relatedEvents=context_events[:5],
+                suggestions=_extract_suggestions(answer),
+            )
+        except Exception:
+            pass  # fall through to OpenAI
 
-    try:
-        resp = await client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            messages=messages,
-            temperature=0.2,
-            max_tokens=1024,
-        )
-        answer = resp.choices[0].message.content or ""
-        suggestions = _extract_suggestions(answer)
+    # 2. Try OpenAI (paid fallback)
+    openai_client = _get_openai()
+    if openai_client:
+        try:
+            resp = await openai_client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                max_tokens=1024,
+            )
+            answer = resp.choices[0].message.content or ""
+            return AIQueryResponse(
+                answer=answer,
+                reasoning="Powered by OpenAI",
+                relatedEvents=context_events[:5],
+                suggestions=_extract_suggestions(answer),
+            )
+        except Exception:
+            pass  # fall through to rule-based
 
-        return AIQueryResponse(
-            answer=answer,
-            reasoning=None,
-            relatedEvents=context_events[:5],
-            suggestions=suggestions,
-        )
-    except Exception as exc:
-        return AIQueryResponse(
-            answer=f"⚠️ AI service temporarily unavailable: {exc}\n\nHere is the raw context:\n\n{context_text}",
-            relatedEvents=context_events[:5],
-            suggestions=[],
-        )
+    # 3. Rule-based fallback (no key needed)
+    return _rule_based_response(question, context_events, entity_name)
 
 
 def _build_context_text(

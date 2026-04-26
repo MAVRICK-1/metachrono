@@ -1,14 +1,16 @@
 """
-OpenMetadata REST API client.
+OpenMetadata REST API client — aligned with OpenMetadata v1.12.6 (sandbox).
 
-Wraps all HTTP calls to the OM server with authentication, retries,
-and light response caching.
+All paths are relative to OPENMETADATA_URL which should be set to
+  https://sandbox.open-metadata.org/api/v1
+  (or http://localhost:8585/api/v1 for local)
+
+Swagger reference: https://sandbox.open-metadata.org/swagger.json
 """
 
 import httpx
 from typing import Any, Optional
 from cachetools import TTLCache
-from datetime import datetime
 
 from app.config import settings
 
@@ -24,11 +26,14 @@ class OMClient:
     # ── Authentication ──────────────────────────────────────────────────────
 
     async def _ensure_auth(self, client: httpx.AsyncClient):
+        """JWT bearer auth — supports both pre-set token and username/password login."""
         if settings.OPENMETADATA_JWT_TOKEN:
             self._headers["Authorization"] = f"Bearer {settings.OPENMETADATA_JWT_TOKEN}"
             return
         if self._token:
+            self._headers["Authorization"] = f"Bearer {self._token}"
             return
+        # POST /v1/users/login
         resp = await client.post(
             f"{self._base}/users/login",
             json={
@@ -49,11 +54,11 @@ class OMClient:
         if cache and cache_key in _CACHE:
             return _CACHE[cache_key]
 
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             await self._ensure_auth(client)
             resp = await client.get(
                 f"{self._base}{path}",
-                params=params or {},
+                params={k: v for k, v in (params or {}).items() if v is not None},
                 headers=self._headers,
             )
             resp.raise_for_status()
@@ -63,43 +68,124 @@ class OMClient:
             return data
 
     async def post(self, path: str, body: dict) -> Any:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             await self._ensure_auth(client)
             resp = await client.post(
-                f"{self._base}{path}",
-                json=body,
-                headers=self._headers,
+                f"{self._base}{path}", json=body, headers=self._headers
             )
             resp.raise_for_status()
             return resp.json()
 
     async def put(self, path: str, body: dict) -> Any:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             await self._ensure_auth(client)
             resp = await client.put(
-                f"{self._base}{path}",
-                json=body,
-                headers=self._headers,
+                f"{self._base}{path}", json=body, headers=self._headers
             )
             resp.raise_for_status()
             return resp.json()
 
-    # ── Entity helpers ──────────────────────────────────────────────────────
+    # ── Entity CRUD ─────────────────────────────────────────────────────────
 
-    async def get_entity(self, entity_type: str, entity_id: str) -> dict:
-        """Fetch the current state of any entity."""
-        return await self.get(f"/{entity_type}/{entity_id}")
+    async def get_entity(self, entity_type: str, entity_id: str, fields: str = "") -> dict:
+        """GET /v1/{entityType}/{id}"""
+        params = {}
+        if fields:
+            params["fields"] = fields
+        return await self.get(f"/{entity_type}/{entity_id}", params=params)
 
     async def get_entity_versions(self, entity_type: str, entity_id: str) -> dict:
-        """Return the version history list for an entity."""
+        """GET /v1/{entityType}/{id}/versions → EntityHistory"""
         return await self.get(f"/{entity_type}/{entity_id}/versions")
 
-    async def get_entity_at_version(
-        self, entity_type: str, entity_id: str, version: float
-    ) -> dict:
-        """Return entity snapshot at a specific version number."""
+    async def get_entity_at_version(self, entity_type: str, entity_id: str, version: float) -> dict:
+        """GET /v1/{entityType}/{id}/versions/{version}"""
         ver_str = f"{version:.1f}"
         return await self.get(f"/{entity_type}/{entity_id}/versions/{ver_str}")
+
+    # ── Audit Logs ──────────────────────────────────────────────────────────
+
+    async def get_audit_logs(
+        self,
+        entity_type: Optional[str] = None,
+        entity_fqn: Optional[str] = None,
+        event_type: Optional[str] = None,
+        start_ts: Optional[int] = None,
+        end_ts: Optional[int] = None,
+        user_name: Optional[str] = None,
+        limit: int = 50,
+        after: Optional[str] = None,
+    ) -> dict:
+        """
+        GET /v1/audit/logs
+        Returns structured audit log entries with actor, timestamp, entity info.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if entity_type:  params["entityType"] = entity_type
+        if entity_fqn:   params["entityFQN"] = entity_fqn
+        if event_type:   params["eventType"] = event_type
+        if start_ts:     params["startTs"] = start_ts
+        if end_ts:       params["endTs"] = end_ts
+        if user_name:    params["userName"] = user_name
+        if after:        params["after"] = after
+        return await self.get("/audit/logs", params=params, cache=False)
+
+    # ── Change Summary ───────────────────────────────────────────────────────
+
+    async def get_change_summary(
+        self,
+        entity_type: str,
+        entity_id: str,
+        field_prefix: Optional[str] = None,
+        limit: int = 100,
+    ) -> dict:
+        """
+        GET /v1/changeSummary/{entityType}/{id}
+        Returns who changed each field, source (Manual/AI), and when.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if field_prefix:
+            params["fieldPrefix"] = field_prefix
+        return await self.get(f"/changeSummary/{entity_type}/{entity_id}", params=params)
+
+    # ── Entity History (bulk time-range) ────────────────────────────────────
+
+    async def get_entity_history(
+        self,
+        entity_type: str,
+        start_ts: int,
+        end_ts: int,
+        limit: int = 50,
+    ) -> dict:
+        """
+        GET /v1/{entityType}/history?startTs=&endTs=
+        Returns all versions of all entities in a time range.
+        """
+        return await self.get(
+            f"/{entity_type}/history",
+            params={"startTs": start_ts, "endTs": end_ts, "limit": limit},
+            cache=False,
+        )
+
+    # ── Change Events ────────────────────────────────────────────────────────
+
+    async def get_events(
+        self,
+        entity_created: Optional[str] = None,
+        entity_updated: Optional[str] = None,
+        entity_deleted: Optional[str] = None,
+        timestamp: Optional[int] = None,
+    ) -> dict:
+        """
+        GET /v1/events
+        Returns change events filtered by entity type and timestamp.
+        """
+        params: dict[str, Any] = {}
+        if entity_created: params["entityCreated"] = entity_created
+        if entity_updated: params["entityUpdated"] = entity_updated
+        if entity_deleted: params["entityDeleted"] = entity_deleted
+        if timestamp:      params["timestamp"] = timestamp
+        return await self.get("/events", params=params, cache=False)
 
     # ── Search ──────────────────────────────────────────────────────────────
 
@@ -109,15 +195,12 @@ class OMClient:
         index: str = "dataAsset",
         size: int = 25,
         from_: int = 0,
-        filters: Optional[dict] = None,
     ) -> dict:
-        params: dict[str, Any] = {
-            "q": query,
-            "index": index,
-            "size": size,
-            "from": from_,
-        }
-        return await self.get("/search/query", params=params)
+        """GET /v1/search/query"""
+        return await self.get(
+            "/search/query",
+            params={"q": query, "index": index, "size": size, "from": from_},
+        )
 
     # ── Lineage ─────────────────────────────────────────────────────────────
 
@@ -128,112 +211,42 @@ class OMClient:
         upstream_depth: int = 3,
         downstream_depth: int = 3,
     ) -> dict:
+        """GET /v1/lineage/{entity}/{id}"""
         return await self.get(
             f"/lineage/{entity_type}/{entity_id}",
-            params={
-                "upstreamDepth": upstream_depth,
-                "downstreamDepth": downstream_depth,
-            },
+            params={"upstreamDepth": upstream_depth, "downstreamDepth": downstream_depth},
             cache=False,
         )
 
-    # ── Activity feed / change events ───────────────────────────────────────
+    # ── Tables specific ─────────────────────────────────────────────────────
 
-    async def get_feed(
-        self,
-        entity_link: Optional[str] = None,
-        limit: int = 25,
-        after: Optional[str] = None,
-    ) -> dict:
-        params: dict[str, Any] = {"limit": limit}
-        if entity_link:
-            params["entityLink"] = entity_link
-        if after:
-            params["after"] = after
-        return await self.get("/feed", params=params, cache=False)
+    async def list_tables(self, limit: int = 25, after: Optional[str] = None, database_schema: Optional[str] = None) -> dict:
+        """GET /v1/tables"""
+        params: dict[str, Any] = {"limit": limit, "fields": "owners,tags,domain"}
+        if after: params["after"] = after
+        if database_schema: params["databaseSchema"] = database_schema
+        return await self.get("/tables", params=params)
 
-    async def get_change_events(
-        self,
-        entity_type: Optional[str] = None,
-        start_ts: Optional[int] = None,
-        end_ts: Optional[int] = None,
-        event_type: Optional[str] = None,
-        limit: int = 50,
-    ) -> dict:
-        params: dict[str, Any] = {"limit": limit}
-        if entity_type:
-            params["entityType"] = entity_type
-        if start_ts:
-            params["timestamp"] = start_ts
-        if event_type:
-            params["eventType"] = event_type
-        return await self.get("/events/subscriptions/eventsRecord", params=params, cache=False)
+    # ── Generic list ────────────────────────────────────────────────────────
 
-    # ── Data Quality ────────────────────────────────────────────────────────
+    async def list_entities(self, entity_type: str, limit: int = 25, fields: str = "owners,tags,domain") -> dict:
+        """GET /v1/{entityType}"""
+        return await self.get(f"/{entity_type}", params={"limit": limit, "fields": fields})
 
-    async def get_test_cases(
-        self,
-        entity_fqn: Optional[str] = None,
-        limit: int = 25,
-    ) -> dict:
+    # ── System ───────────────────────────────────────────────────────────────
+
+    async def get_version(self) -> dict:
+        """GET /v1/system/version"""
+        return await self.get("/system/version")
+
+    # ── Data Quality ─────────────────────────────────────────────────────────
+
+    async def get_test_cases(self, entity_fqn: Optional[str] = None, limit: int = 25) -> dict:
         params: dict[str, Any] = {"limit": limit}
         if entity_fqn:
             params["entityLink"] = f"<#E::table::{entity_fqn}>"
         return await self.get("/dataQuality/testCases", params=params, cache=False)
 
-    async def get_test_case_results(
-        self,
-        test_case_fqn: str,
-        start_ts: Optional[int] = None,
-        end_ts: Optional[int] = None,
-        limit: int = 30,
-    ) -> dict:
-        params: dict[str, Any] = {"limit": limit}
-        if start_ts:
-            params["startTs"] = start_ts
-        if end_ts:
-            params["endTs"] = end_ts
-        return await self.get(
-            f"/dataQuality/testCases/{test_case_fqn}/testCaseResult",
-            params=params,
-            cache=False,
-        )
-
-    # ── Tags / Classification ────────────────────────────────────────────────
-
-    async def get_tags(self, limit: int = 50) -> dict:
-        return await self.get("/tags", params={"limit": limit})
-
-    async def get_classifications(self, limit: int = 50) -> dict:
-        return await self.get("/classifications", params={"limit": limit})
-
-    # ── Teams / Users ────────────────────────────────────────────────────────
-
-    async def get_user(self, user_id: str) -> dict:
-        return await self.get(f"/users/{user_id}")
-
-    # ── Tables specific ─────────────────────────────────────────────────────
-
-    async def list_tables(
-        self,
-        limit: int = 25,
-        after: Optional[str] = None,
-        database_schema: Optional[str] = None,
-    ) -> dict:
-        params: dict[str, Any] = {"limit": limit, "fields": "owners,tags,domain"}
-        if after:
-            params["after"] = after
-        if database_schema:
-            params["databaseSchema"] = database_schema
-        return await self.get("/tables", params=params)
-
-    async def get_table_profile(self, entity_fqn: str) -> dict:
-        return await self.get(
-            "/tables/name/{fqn}/tableProfile".replace("{fqn}", entity_fqn),
-            cache=False,
-        )
-
 
 # ── Singleton ────────────────────────────────────────────────────────────────
-
 om_client = OMClient()
