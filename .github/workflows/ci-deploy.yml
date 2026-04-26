@@ -1,0 +1,79 @@
+name: MetaChronos CI — Schema Guard + Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 1. Schema Guard ────────────────────────────────────────────────────────
+  schema-guard:
+    name: 🛡️ Blast Radius Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run MetaChronos Schema Guard
+        uses: ./.github/actions/metachrono-check
+        with:
+          openmetadata_url: ${{ secrets.OPENMETADATA_URL }}
+          openmetadata_token: ${{ secrets.OPENMETADATA_TOKEN }}
+          metachrono_url: ${{ secrets.METACHRONO_URL }}
+          entity_id: ${{ vars.MONITORED_ENTITY_ID || 'set-your-entity-id' }}
+          fail_on_critical: 'true'
+
+  # ── 2. Deploy Frontend → GitHub Pages ────────────────────────────────────
+  deploy-frontend:
+    name: 🚀 Deploy Frontend to GitHub Pages
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install --legacy-peer-deps
+
+      - name: Build
+        working-directory: frontend
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL || 'https://metachrono-api.onrender.com/api/v1' }}
+          PUBLIC_URL: /${{ github.event.repository.name }}
+        run: npm run build
+
+      # Fix React Router for GitHub Pages (HashRouter fallback)
+      - name: Add 404.html for SPA routing
+        run: cp frontend/build/index.html frontend/build/404.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/build
+          commit_message: '🚀 Deploy MetaChronos frontend [skip ci]'
+
+  # ── 3. Deploy Backend → Render ────────────────────────────────────────────
+  deploy-backend:
+    name: 🚀 Deploy Backend to Render
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            curl -sf "${{ secrets.RENDER_DEPLOY_HOOK }}" && echo "✅ Render deploy triggered"
+          else
+            echo "ℹ️  Set RENDER_DEPLOY_HOOK secret to enable auto-deploy"
+          fi

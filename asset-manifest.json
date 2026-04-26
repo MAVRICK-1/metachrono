@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/metachrono/static/css/main.4d6d49cc.css",
+    "main.js": "/metachrono/static/js/main.3554289f.js",
+    "index.html": "/metachrono/index.html",
+    "main.4d6d49cc.css.map": "/metachrono/static/css/main.4d6d49cc.css.map",
+    "main.3554289f.js.map": "/metachrono/static/js/main.3554289f.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.4d6d49cc.css",
+    "static/js/main.3554289f.js"
+  ]
+}
