@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { getComplianceSummary, listAssets, getTimeline } from '../services/api';
-import { Activity, Database, ShieldCheck, Zap, TrendingUp, AlertTriangle } from 'lucide-react';
+import { getComplianceSummary, listAssets } from '../services/api';
+import { Activity, Database, ShieldCheck, Zap, AlertTriangle, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const COLORS = ['#7c5cfc', '#38bdf8', '#34d399', '#fbbf24'];
+
+// Known sandbox entities to use as quick-start demos
+const DEMO_ENTITIES = [
+  { id: 'bf257ff3-f238-4a10-a2f7-a244b54de43e', name: 'dim_customers', type: 'tables', fqn: 'acme_nexus_analytics.ANALYTICS.MARTS.dim_customers', service: 'Snowflake' },
+];
 
 export default function Dashboard() {
   const [compliance, setCompliance] = useState<any>(null);
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     Promise.all([
@@ -17,6 +25,7 @@ export default function Dashboard() {
     ]).then(([comp, assetData]) => {
       setCompliance(comp);
       setAssets(assetData.assets || []);
+      setError(!comp && !(assetData.assets?.length));
       setLoading(false);
     });
   }, []);
@@ -49,6 +58,37 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* No-token demo quickstart */}
+      {!loading && error && (
+        <div className="card" style={{ borderColor: 'rgba(251,191,36,0.4)', background: 'rgba(251,191,36,0.04)' }}>
+          <div className="card-title" style={{ color: 'var(--yellow)' }}>⚡ Quick Demo — Try with a real asset</div>
+          <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14, lineHeight: 1.7 }}>
+            The OpenMetadata sandbox requires a token. While you get it, try these known real assets:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {DEMO_ENTITIES.map(e => (
+              <div key={e.id} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--accent2)' }}>{e.name}</span>
+                <span className="badge badge-blue">{e.service}</span>
+                <code style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--bg3)', padding: '2px 8px', borderRadius: 4 }}>{e.id}</code>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => navigate(`/timeline?entityType=${e.type}&entityId=${e.id}`)}>
+                    <Clock size={11} /> Timeline
+                  </button>
+                  <button className="btn btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => navigate(`/impact?entityType=${e.type}&entityId=${e.id}`)}>
+                    <Zap size={11} /> Impact
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 12 }}>
+            💡 To load all data: log in at <a href="https://sandbox.open-metadata.org" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent2)' }}>sandbox.open-metadata.org</a> → F12 → Local Storage → copy <code style={{ color: 'var(--accent)' }}>oidcIdToken</code> → paste in the banner below.
+          </p>
+        </div>
+      )}
       {/* Stats */}
       <div className="stat-grid">
         <div className="stat-tile">

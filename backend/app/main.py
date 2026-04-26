@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import assets, timeline, lineage, impact, governance, ai_chat, mcp_server
+from app.routers import assets, timeline, lineage, impact, governance, ai_chat, mcp_server, settings
 
 app = FastAPI(
     title="MetaChronos",
@@ -48,6 +48,7 @@ app.include_router(impact.router, prefix="/api/v1")
 app.include_router(governance.router, prefix="/api/v1")
 app.include_router(ai_chat.router, prefix="/api/v1")
 app.include_router(mcp_server.router, prefix="/api/v1")
+app.include_router(settings.router, prefix="/api/v1")
 
 # ── Health & info ─────────────────────────────────────────────────────────────
 

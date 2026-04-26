@@ -8,12 +8,14 @@ import GovernancePage from './pages/GovernancePage';
 import AIAssistant from './pages/AIAssistant';
 import LineagePage from './pages/LineagePage';
 import HowToUsePage from './pages/HowToUsePage';
+import SettingsPage from './pages/SettingsPage';
 import GuidedTour, { useTour } from './components/GuidedTour';
 import UserMenu from './components/UserMenu';
+import TokenBanner from './components/TokenBanner';
 import { AuthProvider } from './contexts/AuthContext';
 import {
   LayoutDashboard, Clock, GitBranch, Zap,
-  ShieldCheck, Bot, Database, HelpCircle, Play
+  ShieldCheck, Bot, Database, HelpCircle, Play, Settings
 } from 'lucide-react';
 import './App.css';
 
@@ -25,6 +27,7 @@ const NAV = [
   { to: '/impact',     icon: Zap,             label: 'Impact'      },
   { to: '/governance', icon: ShieldCheck,     label: 'Governance'  },
   { to: '/ai',         icon: Bot,             label: 'AI Chat'     },
+  { to: '/settings',   icon: Settings,        label: 'Settings'    },
   { to: '/how-to-use', icon: HelpCircle,      label: 'How to Use'  },
 ];
 
@@ -111,10 +114,12 @@ function AppInner() {
           <Route path="/impact"      element={<ImpactPage />} />
           <Route path="/governance"  element={<GovernancePage />} />
           <Route path="/ai"          element={<AIAssistant />} />
+          <Route path="/settings"     element={<SettingsPage />} />
           <Route path="/how-to-use"  element={<HowToUsePage />} />
         </Routes>
       </Layout>
       {show && <GuidedTour onDone={endTour} />}
+      <TokenBanner />
     </>
   );
 }
