@@ -70,6 +70,15 @@ export interface LineageGraph {
   edges: LineageEdge[];
 }
 
+export interface LineageDiff {
+  addedNodes: LineageNode[];
+  removedNodes: LineageNode[];
+  addedEdges: LineageEdge[];
+  removedEdges: LineageEdge[];
+  fromTimestamp: number;
+  toTimestamp: number;
+}
+
 export interface ImpactedAsset {
   id: string;
   name: string;

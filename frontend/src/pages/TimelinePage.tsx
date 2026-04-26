@@ -120,7 +120,7 @@ export default function TimelinePage() {
     setLoading(false);
   }
 
-  const versions = [...new Set(events.map(e => e.currentVersion).filter(Boolean))].sort() as number[];
+  const versions = Array.from(new Set(events.map(e => e.currentVersion).filter(Boolean))).sort() as number[];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
